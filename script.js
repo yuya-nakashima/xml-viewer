@@ -1,5 +1,6 @@
-const folderInput = document.getElementById('folderInput');
+const fileInput = document.getElementById('fileInput');
 const singleXslInput = document.getElementById('singleXslInput');
+const dropZone = document.getElementById('dropZone');
 const message = document.getElementById('message');
 const tabSection = document.getElementById('tabSection');
 const tabs = document.getElementById('tabs');
@@ -12,15 +13,61 @@ let pendingXslTargetIndex = -1;
 initialize();
 
 function initialize() {
-  folderInput.addEventListener('change', handleFolderSelect);
+  fileInput.addEventListener('change', handleFileSelect);
   singleXslInput.addEventListener('change', handleManualXslSelect);
+
+  dropZone.addEventListener('dragenter', handleDragEnter);
+  dropZone.addEventListener('dragover', handleDragOver);
+  dropZone.addEventListener('dragleave', handleDragLeave);
+  dropZone.addEventListener('drop', handleDrop);
+
+  ['dragenter', 'dragover', 'dragleave', 'drop'].forEach((eventName) => {
+    window.addEventListener(eventName, preventWindowDrop, false);
+  });
 }
 
-function handleFolderSelect(event) {
-  const files = Array.from(event.target.files || []);
+function preventWindowDrop(event) {
+  event.preventDefault();
+}
 
+function handleFileSelect(event) {
+  const files = Array.from(event.target.files || []);
+  loadFiles(files);
+}
+
+function handleDragEnter(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  dropZone.classList.add('is-dragover');
+}
+
+function handleDragOver(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  dropZone.classList.add('is-dragover');
+}
+
+function handleDragLeave(event) {
+  event.preventDefault();
+  event.stopPropagation();
+
+  if (!dropZone.contains(event.relatedTarget)) {
+    dropZone.classList.remove('is-dragover');
+  }
+}
+
+function handleDrop(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  dropZone.classList.remove('is-dragover');
+
+  const files = Array.from(event.dataTransfer.files || []);
+  loadFiles(files);
+}
+
+function loadFiles(files) {
   if (files.length === 0) {
-    showMessage('フォルダが選択されていません。');
+    showMessage('ファイルが選択されていません。');
     return;
   }
 
@@ -32,11 +79,11 @@ function handleFolderSelect(event) {
       tabSection.classList.add('is-hidden');
       viewerBody.innerHTML = `
         <p class="error-text">
-          選択したフォルダ直下にXMLファイルが見つかりませんでした。<br>
-          XMLファイルとXSLファイルが入っているフォルダを選択してください。
+          XMLファイルが見つかりませんでした。<br>
+          XMLファイルとXSLファイルを選択してください。
         </p>
       `;
-      showMessage('XMLファイルとXSLファイルが入っているフォルダを選択してください。');
+      showMessage('XMLファイルとXSLファイルを選択してください。');
       return;
     }
 
@@ -47,16 +94,15 @@ function handleFolderSelect(event) {
     tabs.innerHTML = '';
     tabSection.classList.add('is-hidden');
     viewerBody.innerHTML = '<p class="error-text">ファイルの読み込みに失敗しました。</p>';
-    showMessage('フォルダの解析に失敗しました。');
+    showMessage('ファイルの解析に失敗しました。');
   }
 }
 
 function buildPairsFromFiles(files) {
-  const directFiles = files.filter(isDirectChildFile);
   const xmlMap = new Map();
   const xslMap = new Map();
 
-  directFiles.forEach((file) => {
+  files.forEach((file) => {
     const lowerName = file.name.toLowerCase();
 
     if (lowerName.endsWith('.xml')) {
@@ -81,13 +127,6 @@ function buildPairsFromFiles(files) {
   }));
 
   activeIndex = -1;
-}
-
-function isDirectChildFile(file) {
-  const relativePath = file.webkitRelativePath || '';
-  const parts = relativePath.split('/').filter(Boolean);
-
-  return parts.length === 2;
 }
 
 function getBaseName(fileName) {

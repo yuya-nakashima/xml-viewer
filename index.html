@@ -13,13 +13,18 @@
     </header>
 
     <section class="control-section">
-      <label for="folderInput" class="folder-button">フォルダ選択</label>
+      <label for="fileInput" class="file-button">ファイル選択</label>
       <input
         type="file"
-        id="folderInput"
-        webkitdirectory
+        id="fileInput"
         multiple
+        accept=".xml,.xsl,.xslt,text/xml,application/xml"
       />
+
+      <div id="dropZone" class="drop-zone">
+        ここに XML / XSL ファイルをドラッグ＆ドロップ
+      </div>
+
       <p id="message" class="message"></p>
     </section>
 
