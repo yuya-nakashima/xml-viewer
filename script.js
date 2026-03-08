@@ -4,17 +4,65 @@ const message = document.getElementById('message');
 const fileName = document.getElementById('fileName');
 const clearButton = document.getElementById('clearButton');
 const copyButton = document.getElementById('copyButton');
+const dropZone = document.getElementById('dropZone');
 
 xmlFileInput.addEventListener('change', handleFileSelect);
 clearButton.addEventListener('click', clearViewer);
 copyButton.addEventListener('click', copyOutput);
 
+dropZone.addEventListener('dragenter', handleDragEnter);
+dropZone.addEventListener('dragover', handleDragOver);
+dropZone.addEventListener('dragleave', handleDragLeave);
+dropZone.addEventListener('drop', handleDrop);
+
 function handleFileSelect(event) {
   const file = event.target.files[0];
+  if (!file) {
+    return;
+  }
 
+  readXmlFile(file);
+}
+
+function handleDragEnter(event) {
+  event.preventDefault();
+  dropZone.classList.add('is-dragover');
+}
+
+function handleDragOver(event) {
+  event.preventDefault();
+  dropZone.classList.add('is-dragover');
+}
+
+function handleDragLeave(event) {
+  event.preventDefault();
+
+  if (!dropZone.contains(event.relatedTarget)) {
+    dropZone.classList.remove('is-dragover');
+  }
+}
+
+function handleDrop(event) {
+  event.preventDefault();
+  dropZone.classList.remove('is-dragover');
+
+  const files = event.dataTransfer.files;
+  if (!files || files.length === 0) {
+    return;
+  }
+
+  const file = files[0];
+  readXmlFile(file);
+}
+
+function readXmlFile(file) {
   clearMessage();
 
-  if (!file) {
+  if (!isXmlFile(file)) {
+    output.textContent = 'XMLファイルのみ読み込めます。';
+    message.textContent = 'XML形式のファイルを選択してください。';
+    message.style.color = '#b91c1c';
+    fileName.textContent = '';
     return;
   }
 
@@ -44,6 +92,15 @@ function handleFileSelect(event) {
   };
 
   reader.readAsText(file, 'UTF-8');
+}
+
+function isXmlFile(file) {
+  const fileNameLower = file.name.toLowerCase();
+  return (
+    file.type === 'text/xml' ||
+    file.type === 'application/xml' ||
+    fileNameLower.endsWith('.xml')
+  );
 }
 
 function formatXml(xml) {
@@ -90,6 +147,7 @@ function clearViewer() {
   output.textContent = 'ここにXMLが表示されます。';
   message.textContent = '';
   fileName.textContent = '';
+  dropZone.classList.remove('is-dragover');
 }
 
 function clearMessage() {

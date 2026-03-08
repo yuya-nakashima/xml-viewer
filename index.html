@@ -13,11 +13,16 @@
       XMLファイルを読み込み、整形して表示するシンプルなビューアです。
     </p>
 
-    <div class="upload-box">
-      <label for="xmlFile" class="file-label">XMLファイルを選択</label>
-      <input type="file" id="xmlFile" accept=".xml,text/xml,application/xml" />
-      <button id="clearButton" type="button">クリア</button>
-    </div>
+    <section id="dropZone" class="drop-zone" aria-label="XMLファイルのアップロードエリア">
+      <p class="drop-zone__title">ここにXMLファイルをドラッグ＆ドロップ</p>
+      <p class="drop-zone__sub">または下のボタンから選択してください</p>
+
+      <div class="upload-box">
+        <label for="xmlFile" class="file-label">XMLファイルを選択</label>
+        <input type="file" id="xmlFile" accept=".xml,text/xml,application/xml" />
+        <button id="clearButton" type="button">クリア</button>
+      </div>
+    </section>
 
     <section class="status-area">
       <p id="fileName" class="file-name"></p>
