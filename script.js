@@ -12,6 +12,7 @@ const treeOutput = document.getElementById('treeOutput');
 const transformedOutput = document.getElementById('transformedOutput');
 const panelTitle = document.getElementById('panelTitle');
 const tabs = document.querySelectorAll('.tab');
+
 const panels = {
   formatted: document.getElementById('panel-formatted'),
   tree: document.getElementById('panel-tree'),
@@ -21,59 +22,100 @@ const panels = {
 let currentXmlText = '';
 let currentXslText = '';
 
-xmlFileInput.addEventListener('change', handleXmlSelect);
-xslFileInput.addEventListener('change', handleXslSelect);
-renderButton.addEventListener('click', renderFiles);
-clearButton.addEventListener('click', clearViewer);
-copyButton.addEventListener('click', copyCurrentPanel);
+initialize();
 
-dropZone.addEventListener('dragenter', handleDragEnter);
-dropZone.addEventListener('dragover', handleDragOver);
-dropZone.addEventListener('dragleave', handleDragLeave);
-dropZone.addEventListener('drop', handleDrop);
+function initialize() {
+  xmlFileInput.addEventListener('change', handleXmlSelect);
+  xslFileInput.addEventListener('change', handleXslSelect);
+  renderButton.addEventListener('click', renderFiles);
+  clearButton.addEventListener('click', clearViewer);
+  copyButton.addEventListener('click', copyCurrentPanel);
 
-tabs.forEach((tab) => {
-  tab.addEventListener('click', () => switchTab(tab.dataset.tab));
-});
+  dropZone.addEventListener('dragenter', handleDragEnter);
+  dropZone.addEventListener('dragover', handleDragOver);
+  dropZone.addEventListener('dragleave', handleDragLeave);
+  dropZone.addEventListener('drop', handleDrop);
+
+  // ページ全体でファイルが別タブ表示されるのを防ぐ
+  ['dragenter', 'dragover', 'dragleave', 'drop'].forEach((eventName) => {
+    window.addEventListener(eventName, preventWindowDrop, false);
+  });
+
+  tabs.forEach((tab) => {
+    tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+  });
+}
+
+function preventWindowDrop(event) {
+  event.preventDefault();
+}
 
 function handleXmlSelect(event) {
   const file = event.target.files[0];
-  if (!file) return;
+  if (!file) {
+    return;
+  }
+
+  if (!isXmlLikeFile(file)) {
+    showMessage('XMLファイルを選択してください。', 'error');
+    xmlFileInput.value = '';
+    xmlFileName.textContent = '未選択';
+    return;
+  }
 
   xmlFileName.textContent = file.name;
-  readFileText(file).then((text) => {
-    currentXmlText = text;
-    showMessage('XMLファイルを読み込みました。', 'success');
-  }).catch(() => {
-    showMessage('XMLファイルの読み込みに失敗しました。', 'error');
-  });
+
+  readFileText(file)
+    .then((text) => {
+      currentXmlText = text;
+      showMessage('XMLファイルを読み込みました。', 'success');
+    })
+    .catch(() => {
+      showMessage('XMLファイルの読み込みに失敗しました。', 'error');
+    });
 }
 
 function handleXslSelect(event) {
   const file = event.target.files[0];
-  if (!file) return;
+  if (!file) {
+    return;
+  }
+
+  if (!isXslFile(file)) {
+    showMessage('XSLファイルを選択してください。', 'error');
+    xslFileInput.value = '';
+    xslFileName.textContent = '未選択';
+    return;
+  }
 
   xslFileName.textContent = file.name;
-  readFileText(file).then((text) => {
-    currentXslText = text;
-    showMessage('XSLファイルを読み込みました。', 'success');
-  }).catch(() => {
-    showMessage('XSLファイルの読み込みに失敗しました。', 'error');
-  });
+
+  readFileText(file)
+    .then((text) => {
+      currentXslText = text;
+      showMessage('XSLファイルを読み込みました。', 'success');
+    })
+    .catch(() => {
+      showMessage('XSLファイルの読み込みに失敗しました。', 'error');
+    });
 }
 
 function handleDragEnter(event) {
   event.preventDefault();
+  event.stopPropagation();
   dropZone.classList.add('is-dragover');
 }
 
 function handleDragOver(event) {
   event.preventDefault();
+  event.stopPropagation();
   dropZone.classList.add('is-dragover');
 }
 
 function handleDragLeave(event) {
   event.preventDefault();
+  event.stopPropagation();
+
   if (!dropZone.contains(event.relatedTarget)) {
     dropZone.classList.remove('is-dragover');
   }
@@ -81,40 +123,51 @@ function handleDragLeave(event) {
 
 async function handleDrop(event) {
   event.preventDefault();
+  event.stopPropagation();
   dropZone.classList.remove('is-dragover');
 
   const files = Array.from(event.dataTransfer.files || []);
-  if (files.length === 0) return;
-
-  const xmlFile = files.find((file) => isXmlFile(file) && !isXslFile(file));
-  const xslFile = files.find((file) => isXslFile(file));
-
-  if (!xmlFile && !xslFile && files.length === 1 && isXmlFile(files[0])) {
-    currentXmlText = await readFileText(files[0]);
-    xmlFileName.textContent = files[0].name;
-    showMessage('XMLファイルを読み込みました。', 'success');
+  if (files.length === 0) {
     return;
   }
 
-  if (xmlFile) {
-    currentXmlText = await readFileText(xmlFile);
-    xmlFileName.textContent = xmlFile.name;
-  }
+  try {
+    const xmlCandidates = files.filter((file) => isXmlLikeFile(file));
+    const xslCandidates = files.filter((file) => isXslFile(file));
 
-  if (xslFile) {
-    currentXslText = await readFileText(xslFile);
-    xslFileName.textContent = xslFile.name;
-  }
-
-  if (!xmlFile && files.length > 0) {
-    const fallbackXml = files.find((file) => isXmlFile(file));
-    if (fallbackXml) {
-      currentXmlText = await readFileText(fallbackXml);
-      xmlFileName.textContent = fallbackXml.name;
+    // XSLではないXMLを優先してXML本体として扱う
+    let xmlFile = xmlCandidates.find((file) => !isXslFile(file));
+    if (!xmlFile && xmlCandidates.length > 0) {
+      xmlFile = xmlCandidates[0];
     }
-  }
 
-  showMessage('ファイルを読み込みました。「表示」を押してください。', 'success');
+    const xslFile = xslCandidates[0];
+
+    if (xmlFile) {
+      currentXmlText = await readFileText(xmlFile);
+      xmlFileName.textContent = xmlFile.name;
+    }
+
+    if (xslFile) {
+      currentXslText = await readFileText(xslFile);
+      xslFileName.textContent = xslFile.name;
+    }
+
+    if (!xmlFile && !xslFile) {
+      showMessage('XMLまたはXSLファイルをドロップしてください。', 'error');
+      return;
+    }
+
+    if (xmlFile && xslFile) {
+      showMessage('XMLファイルとXSLファイルを読み込みました。「表示」を押してください。', 'success');
+    } else if (xmlFile) {
+      showMessage('XMLファイルを読み込みました。「表示」を押してください。', 'success');
+    } else if (xslFile) {
+      showMessage('XSLファイルを読み込みました。XMLファイルも選択して「表示」を押してください。', 'success');
+    }
+  } catch (error) {
+    showMessage('ファイルの読み込みに失敗しました。', 'error');
+  }
 }
 
 async function renderFiles() {
@@ -125,7 +178,9 @@ async function renderFiles() {
 
   try {
     const xmlDoc = parseXml(currentXmlText);
+
     formattedOutput.innerHTML = highlightXml(formatXml(currentXmlText));
+
     treeOutput.innerHTML = '';
     treeOutput.appendChild(buildTreeView(xmlDoc.documentElement));
 
@@ -133,8 +188,10 @@ async function renderFiles() {
       try {
         const xslDoc = parseXml(currentXslText);
         const resultNode = transformXml(xmlDoc, xslDoc);
+
         transformedOutput.innerHTML = '';
         transformedOutput.appendChild(resultNode);
+
         showMessage('XMLを表示しました。XSL適用結果も生成しました。', 'success');
       } catch (error) {
         transformedOutput.textContent = 'XSLの適用に失敗しました。XSLの形式を確認してください。';
@@ -155,15 +212,21 @@ async function renderFiles() {
 function clearViewer() {
   currentXmlText = '';
   currentXslText = '';
+
   xmlFileInput.value = '';
   xslFileInput.value = '';
+
   xmlFileName.textContent = '未選択';
   xslFileName.textContent = '未選択';
+
   formattedOutput.textContent = 'ここにXMLが表示されます。';
   treeOutput.textContent = 'ここにXMLの構造が表示されます。';
   transformedOutput.textContent = 'ここにXSL適用結果が表示されます。';
+
   message.textContent = '';
   dropZone.classList.remove('is-dragover');
+
+  switchTab('formatted');
 }
 
 function switchTab(tabName) {
@@ -181,7 +244,7 @@ function switchTab(tabName) {
     transformed: 'XSL適用結果'
   };
 
-  panelTitle.textContent = titles[tabName];
+  panelTitle.textContent = titles[tabName] || '表示結果';
 }
 
 function showMessage(text, type) {
@@ -219,11 +282,13 @@ function transformXml(xmlDoc, xslDoc) {
   const fragment = processor.transformToFragment(xmlDoc, document);
   const wrapper = document.createElement('div');
   wrapper.appendChild(fragment);
+
   return wrapper;
 }
 
-function isXmlFile(file) {
+function isXmlLikeFile(file) {
   const name = file.name.toLowerCase();
+
   return (
     file.type === 'text/xml' ||
     file.type === 'application/xml' ||
@@ -247,7 +312,9 @@ function formatXml(xml) {
     .reduce(
       (state, line) => {
         const trimmed = line.trim();
-        if (!trimmed) return state;
+        if (!trimmed) {
+          return state;
+        }
 
         if (/^<\//.test(trimmed)) {
           state.indent -= 1;
@@ -280,7 +347,10 @@ function escapeHtml(text) {
 function highlightXml(xmlText) {
   let escaped = escapeHtml(xmlText);
 
-  escaped = escaped.replace(/(&lt;!--[\s\S]*?--&gt;)/g, '<span class="xml-comment">$1</span>');
+  escaped = escaped.replace(
+    /(&lt;!--[\s\S]*?--&gt;)/g,
+    '<span class="xml-comment">$1</span>'
+  );
 
   escaped = escaped.replace(
     /(&lt;\/?)([\w:-]+)(.*?)(\/?&gt;)/g,
@@ -351,7 +421,6 @@ function buildTreeNode(node) {
 
 async function copyCurrentPanel() {
   const activeTab = document.querySelector('.tab.is-active')?.dataset.tab;
-
   let text = '';
 
   if (activeTab === 'formatted') {
