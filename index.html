@@ -3,71 +3,42 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>XML Viewer</title>
+  <title>XMLビューア</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <main class="container">
     <header class="page-header">
-      <h1>XML Viewer</h1>
-      <p class="description">
-        XMLファイルを読み込み、整形表示・ツリー表示・XSL適用表示ができるビューアです。
-      </p>
+      <h1>XMLビューア</h1>
     </header>
 
-    <section id="dropZone" class="drop-zone" aria-label="ファイルアップロードエリア">
-      <p class="drop-zone__title">ここに XML / XSL ファイルをドラッグ＆ドロップ</p>
-      <p class="drop-zone__sub">または下のボタンから選択してください</p>
-
-      <div class="upload-grid">
-        <div class="upload-item">
-          <label for="xmlFile" class="file-label">XMLファイルを選択</label>
-          <input type="file" id="xmlFile" accept=".xml,text/xml,application/xml" />
-          <p id="xmlFileName" class="selected-file">未選択</p>
-        </div>
-
-        <div class="upload-item">
-          <label for="xslFile" class="file-label secondary">XSLファイルを選択（任意）</label>
-          <input type="file" id="xslFile" accept=".xsl,.xslt,.xml,text/xml,application/xml" />
-          <p id="xslFileName" class="selected-file">未選択</p>
-        </div>
-      </div>
-
-      <div class="actions">
-        <button id="renderButton" type="button">表示</button>
-        <button id="clearButton" type="button" class="muted">クリア</button>
-      </div>
-    </section>
-
-    <section class="status-area">
+    <section class="control-section">
+      <label for="folderInput" class="folder-button">フォルダ選択</label>
+      <input
+        type="file"
+        id="folderInput"
+        webkitdirectory
+        multiple
+      />
       <p id="message" class="message"></p>
     </section>
 
+    <section id="tabSection" class="tab-section is-hidden">
+      <div id="tabs" class="tabs" aria-label="XMLタブ一覧"></div>
+    </section>
+
     <section class="viewer-section">
-      <div class="tabs" role="tablist" aria-label="表示切替">
-        <button class="tab is-active" type="button" data-tab="formatted">整形XML</button>
-        <button class="tab" type="button" data-tab="tree">ツリー表示</button>
-        <button class="tab" type="button" data-tab="transformed">XSL適用結果</button>
-      </div>
-
-      <div class="viewer-header">
-        <h2 id="panelTitle">整形XML</h2>
-        <button id="copyButton" type="button">コピー</button>
-      </div>
-
-      <div class="panel is-active" id="panel-formatted">
-        <pre id="formattedOutput" class="output output-code">ここにXMLが表示されます。</pre>
-      </div>
-
-      <div class="panel" id="panel-tree">
-        <div id="treeOutput" class="tree-output">ここにXMLの構造が表示されます。</div>
-      </div>
-
-      <div class="panel" id="panel-transformed">
-        <div id="transformedOutput" class="transformed-output">ここにXSL適用結果が表示されます。</div>
-      </div>
+      <h2 class="viewer-title">表示結果</h2>
+      <div id="viewerBody" class="viewer-body">ここに変換結果</div>
     </section>
   </main>
+
+  <input
+    type="file"
+    id="singleXslInput"
+    accept=".xsl,.xslt,.xml,text/xml,application/xml"
+    hidden
+  />
 
   <script src="script.js"></script>
 </body>

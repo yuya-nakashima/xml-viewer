@@ -1,255 +1,246 @@
-const xmlFileInput = document.getElementById('xmlFile');
-const xslFileInput = document.getElementById('xslFile');
-const xmlFileName = document.getElementById('xmlFileName');
-const xslFileName = document.getElementById('xslFileName');
-const renderButton = document.getElementById('renderButton');
-const clearButton = document.getElementById('clearButton');
-const copyButton = document.getElementById('copyButton');
-const dropZone = document.getElementById('dropZone');
+const folderInput = document.getElementById('folderInput');
+const singleXslInput = document.getElementById('singleXslInput');
 const message = document.getElementById('message');
-const formattedOutput = document.getElementById('formattedOutput');
-const treeOutput = document.getElementById('treeOutput');
-const transformedOutput = document.getElementById('transformedOutput');
-const panelTitle = document.getElementById('panelTitle');
-const tabs = document.querySelectorAll('.tab');
+const tabSection = document.getElementById('tabSection');
+const tabs = document.getElementById('tabs');
+const viewerBody = document.getElementById('viewerBody');
 
-const panels = {
-  formatted: document.getElementById('panel-formatted'),
-  tree: document.getElementById('panel-tree'),
-  transformed: document.getElementById('panel-transformed')
-};
-
-let currentXmlText = '';
-let currentXslText = '';
+let pairedDocuments = [];
+let activeIndex = -1;
+let pendingXslTargetIndex = -1;
 
 initialize();
 
 function initialize() {
-  xmlFileInput.addEventListener('change', handleXmlSelect);
-  xslFileInput.addEventListener('change', handleXslSelect);
-  renderButton.addEventListener('click', renderFiles);
-  clearButton.addEventListener('click', clearViewer);
-  copyButton.addEventListener('click', copyCurrentPanel);
-
-  dropZone.addEventListener('dragenter', handleDragEnter);
-  dropZone.addEventListener('dragover', handleDragOver);
-  dropZone.addEventListener('dragleave', handleDragLeave);
-  dropZone.addEventListener('drop', handleDrop);
-
-  // ページ全体でファイルが別タブ表示されるのを防ぐ
-  ['dragenter', 'dragover', 'dragleave', 'drop'].forEach((eventName) => {
-    window.addEventListener(eventName, preventWindowDrop, false);
-  });
-
-  tabs.forEach((tab) => {
-    tab.addEventListener('click', () => switchTab(tab.dataset.tab));
-  });
+  folderInput.addEventListener('change', handleFolderSelect);
+  singleXslInput.addEventListener('change', handleManualXslSelect);
 }
 
-function preventWindowDrop(event) {
-  event.preventDefault();
-}
+function handleFolderSelect(event) {
+  const files = Array.from(event.target.files || []);
 
-function handleXmlSelect(event) {
-  const file = event.target.files[0];
-  if (!file) {
-    return;
-  }
-
-  if (!isXmlLikeFile(file)) {
-    showMessage('XMLファイルを選択してください。', 'error');
-    xmlFileInput.value = '';
-    xmlFileName.textContent = '未選択';
-    return;
-  }
-
-  xmlFileName.textContent = file.name;
-
-  readFileText(file)
-    .then((text) => {
-      currentXmlText = text;
-      showMessage('XMLファイルを読み込みました。', 'success');
-    })
-    .catch(() => {
-      showMessage('XMLファイルの読み込みに失敗しました。', 'error');
-    });
-}
-
-function handleXslSelect(event) {
-  const file = event.target.files[0];
-  if (!file) {
-    return;
-  }
-
-  if (!isXslFile(file)) {
-    showMessage('XSLファイルを選択してください。', 'error');
-    xslFileInput.value = '';
-    xslFileName.textContent = '未選択';
-    return;
-  }
-
-  xslFileName.textContent = file.name;
-
-  readFileText(file)
-    .then((text) => {
-      currentXslText = text;
-      showMessage('XSLファイルを読み込みました。', 'success');
-    })
-    .catch(() => {
-      showMessage('XSLファイルの読み込みに失敗しました。', 'error');
-    });
-}
-
-function handleDragEnter(event) {
-  event.preventDefault();
-  event.stopPropagation();
-  dropZone.classList.add('is-dragover');
-}
-
-function handleDragOver(event) {
-  event.preventDefault();
-  event.stopPropagation();
-  dropZone.classList.add('is-dragover');
-}
-
-function handleDragLeave(event) {
-  event.preventDefault();
-  event.stopPropagation();
-
-  if (!dropZone.contains(event.relatedTarget)) {
-    dropZone.classList.remove('is-dragover');
-  }
-}
-
-async function handleDrop(event) {
-  event.preventDefault();
-  event.stopPropagation();
-  dropZone.classList.remove('is-dragover');
-
-  const files = Array.from(event.dataTransfer.files || []);
   if (files.length === 0) {
+    showMessage('フォルダが選択されていません。');
     return;
   }
 
   try {
-    const xmlCandidates = files.filter((file) => isXmlLikeFile(file));
-    const xslCandidates = files.filter((file) => isXslFile(file));
+    buildPairsFromFiles(files);
 
-    // XSLではないXMLを優先してXML本体として扱う
-    let xmlFile = xmlCandidates.find((file) => !isXslFile(file));
-    if (!xmlFile && xmlCandidates.length > 0) {
-      xmlFile = xmlCandidates[0];
-    }
-
-    const xslFile = xslCandidates[0];
-
-    if (xmlFile) {
-      currentXmlText = await readFileText(xmlFile);
-      xmlFileName.textContent = xmlFile.name;
-    }
-
-    if (xslFile) {
-      currentXslText = await readFileText(xslFile);
-      xslFileName.textContent = xslFile.name;
-    }
-
-    if (!xmlFile && !xslFile) {
-      showMessage('XMLまたはXSLファイルをドロップしてください。', 'error');
+    if (pairedDocuments.length === 0) {
+      tabs.innerHTML = '';
+      tabSection.classList.add('is-hidden');
+      viewerBody.innerHTML = `
+        <p class="error-text">
+          選択したフォルダ直下にXMLファイルが見つかりませんでした。<br>
+          XMLファイルとXSLファイルが入っているフォルダを選択してください。
+        </p>
+      `;
+      showMessage('XMLファイルとXSLファイルが入っているフォルダを選択してください。');
       return;
     }
 
-    if (xmlFile && xslFile) {
-      showMessage('XMLファイルとXSLファイルを読み込みました。「表示」を押してください。', 'success');
-    } else if (xmlFile) {
-      showMessage('XMLファイルを読み込みました。「表示」を押してください。', 'success');
-    } else if (xslFile) {
-      showMessage('XSLファイルを読み込みました。XMLファイルも選択して「表示」を押してください。', 'success');
-    }
+    renderTabs();
+    switchTab(0);
+    showMessage(`${pairedDocuments.length}件のXMLを読み込みました。`);
   } catch (error) {
-    showMessage('ファイルの読み込みに失敗しました。', 'error');
+    tabs.innerHTML = '';
+    tabSection.classList.add('is-hidden');
+    viewerBody.innerHTML = '<p class="error-text">ファイルの読み込みに失敗しました。</p>';
+    showMessage('フォルダの解析に失敗しました。');
   }
 }
 
-async function renderFiles() {
-  if (!currentXmlText) {
-    showMessage('XMLファイルを選択してください。', 'error');
+function buildPairsFromFiles(files) {
+  const directFiles = files.filter(isDirectChildFile);
+  const xmlMap = new Map();
+  const xslMap = new Map();
+
+  directFiles.forEach((file) => {
+    const lowerName = file.name.toLowerCase();
+
+    if (lowerName.endsWith('.xml')) {
+      const baseName = getBaseName(file.name);
+      xmlMap.set(baseName, file);
+    } else if (lowerName.endsWith('.xsl') || lowerName.endsWith('.xslt')) {
+      const baseName = getBaseName(file.name);
+      xslMap.set(baseName, file);
+    }
+  });
+
+  const sortedBaseNames = Array.from(xmlMap.keys()).sort((a, b) =>
+    a.localeCompare(b, 'ja')
+  );
+
+  pairedDocuments = sortedBaseNames.map((baseName) => ({
+    baseName,
+    xmlFile: xmlMap.get(baseName),
+    xslFile: xslMap.get(baseName) || null,
+    xmlText: null,
+    xslText: null
+  }));
+
+  activeIndex = -1;
+}
+
+function isDirectChildFile(file) {
+  const relativePath = file.webkitRelativePath || '';
+  const parts = relativePath.split('/').filter(Boolean);
+
+  return parts.length === 2;
+}
+
+function getBaseName(fileName) {
+  return fileName.replace(/\.[^/.]+$/, '');
+}
+
+function renderTabs() {
+  tabs.innerHTML = '';
+
+  pairedDocuments.forEach((item, index) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'tab-button';
+    button.textContent = item.baseName;
+    button.addEventListener('click', () => switchTab(index));
+    tabs.appendChild(button);
+  });
+
+  tabSection.classList.remove('is-hidden');
+}
+
+async function switchTab(index) {
+  activeIndex = index;
+  updateActiveTabUi();
+
+  const target = pairedDocuments[index];
+  if (!target) {
+    viewerBody.textContent = '表示対象がありません。';
+    return;
+  }
+
+  viewerBody.textContent = '読み込み中...';
+
+  try {
+    if (!target.xmlText) {
+      target.xmlText = await readFileText(target.xmlFile);
+    }
+
+    if (target.xslFile && !target.xslText) {
+      target.xslText = await readFileText(target.xslFile);
+    }
+
+    if (target.xslText) {
+      renderTransformedXml(target.xmlText, target.xslText);
+    } else {
+      renderMissingXslUi(target);
+    }
+  } catch (error) {
+    viewerBody.innerHTML = '<p class="error-text">表示に失敗しました。</p>';
+  }
+}
+
+function updateActiveTabUi() {
+  const tabButtons = tabs.querySelectorAll('.tab-button');
+
+  tabButtons.forEach((button, index) => {
+    button.classList.toggle('is-active', index === activeIndex);
+  });
+}
+
+function renderMissingXslUi(target) {
+  viewerBody.innerHTML = '';
+
+  const note = document.createElement('p');
+  note.className = 'viewer-note';
+  note.innerHTML = `
+    対応するXSLファイルが見つかりません。<br>
+    XSLファイルを選択するか、<br>
+    XMLをそのまま表示することができます。
+  `;
+
+  const actions = document.createElement('div');
+  actions.className = 'viewer-actions';
+
+  const selectXslButton = document.createElement('button');
+  selectXslButton.type = 'button';
+  selectXslButton.className = 'action-button';
+  selectXslButton.textContent = 'XSLファイルを選択';
+  selectXslButton.addEventListener('click', () => {
+    pendingXslTargetIndex = activeIndex;
+    singleXslInput.value = '';
+    singleXslInput.click();
+  });
+
+  const showXmlButton = document.createElement('button');
+  showXmlButton.type = 'button';
+  showXmlButton.className = 'action-button';
+  showXmlButton.textContent = 'XMLをそのまま表示';
+  showXmlButton.addEventListener('click', () => {
+    renderRawXml(target.xmlText);
+  });
+
+  actions.appendChild(selectXslButton);
+  actions.appendChild(showXmlButton);
+
+  viewerBody.appendChild(note);
+  viewerBody.appendChild(actions);
+}
+
+async function handleManualXslSelect(event) {
+  const file = event.target.files[0];
+  if (!file) {
+    return;
+  }
+
+  if (pendingXslTargetIndex < 0 || !pairedDocuments[pendingXslTargetIndex]) {
+    showMessage('XSLを適用する対象XMLが見つかりません。');
     return;
   }
 
   try {
-    const xmlDoc = parseXml(currentXmlText);
+    const xslText = await readFileText(file);
+    const target = pairedDocuments[pendingXslTargetIndex];
 
-    formattedOutput.innerHTML = highlightXml(formatXml(currentXmlText));
+    target.xslFile = file;
+    target.xslText = xslText;
 
-    treeOutput.innerHTML = '';
-    treeOutput.appendChild(buildTreeView(xmlDoc.documentElement));
-
-    if (currentXslText) {
-      try {
-        const xslDoc = parseXml(currentXslText);
-        const resultNode = transformXml(xmlDoc, xslDoc);
-
-        transformedOutput.innerHTML = '';
-        transformedOutput.appendChild(resultNode);
-
-        showMessage('XMLを表示しました。XSL適用結果も生成しました。', 'success');
-      } catch (error) {
-        transformedOutput.textContent = 'XSLの適用に失敗しました。XSLの形式を確認してください。';
-        showMessage('XMLは表示しましたが、XSLの適用に失敗しました。', 'error');
-      }
-    } else {
-      transformedOutput.textContent = 'XSLファイルが未選択です。必要ならXSLを選択してから「表示」を押してください。';
-      showMessage('XMLを表示しました。', 'success');
+    if (!target.xmlText) {
+      target.xmlText = await readFileText(target.xmlFile);
     }
+
+    if (pendingXslTargetIndex === activeIndex) {
+      renderTransformedXml(target.xmlText, target.xslText);
+    }
+
+    showMessage(`${target.baseName} にXSLファイルを適用しました。`);
   } catch (error) {
-    formattedOutput.textContent = 'XMLの表示に失敗しました。';
-    treeOutput.textContent = 'XMLの構造を表示できませんでした。';
-    transformedOutput.textContent = 'XSL適用結果を表示できませんでした。';
-    showMessage('XMLの形式が正しくない可能性があります。', 'error');
+    showMessage('XSLファイルの読み込みに失敗しました。');
+  } finally {
+    pendingXslTargetIndex = -1;
   }
 }
 
-function clearViewer() {
-  currentXmlText = '';
-  currentXslText = '';
+function renderTransformedXml(xmlText, xslText) {
+  try {
+    const xmlDoc = parseXml(xmlText);
+    const xslDoc = parseXml(xslText);
+    const resultNode = transformXml(xmlDoc, xslDoc);
 
-  xmlFileInput.value = '';
-  xslFileInput.value = '';
-
-  xmlFileName.textContent = '未選択';
-  xslFileName.textContent = '未選択';
-
-  formattedOutput.textContent = 'ここにXMLが表示されます。';
-  treeOutput.textContent = 'ここにXMLの構造が表示されます。';
-  transformedOutput.textContent = 'ここにXSL適用結果が表示されます。';
-
-  message.textContent = '';
-  dropZone.classList.remove('is-dragover');
-
-  switchTab('formatted');
+    viewerBody.innerHTML = '';
+    viewerBody.appendChild(resultNode);
+  } catch (error) {
+    viewerBody.innerHTML = '<p class="error-text">XSL変換に失敗しました。</p>';
+  }
 }
 
-function switchTab(tabName) {
-  tabs.forEach((tab) => {
-    tab.classList.toggle('is-active', tab.dataset.tab === tabName);
-  });
+function renderRawXml(xmlText) {
+  viewerBody.innerHTML = '';
 
-  Object.entries(panels).forEach(([key, panel]) => {
-    panel.classList.toggle('is-active', key === tabName);
-  });
+  const pre = document.createElement('pre');
+  pre.textContent = xmlText;
 
-  const titles = {
-    formatted: '整形XML',
-    tree: 'ツリー表示',
-    transformed: 'XSL適用結果'
-  };
-
-  panelTitle.textContent = titles[tabName] || '表示結果';
-}
-
-function showMessage(text, type) {
-  message.textContent = text;
-  message.style.color = type === 'success' ? '#15803d' : '#b91c1c';
+  viewerBody.appendChild(pre);
 }
 
 function readFileText(file) {
@@ -286,160 +277,6 @@ function transformXml(xmlDoc, xslDoc) {
   return wrapper;
 }
 
-function isXmlLikeFile(file) {
-  const name = file.name.toLowerCase();
-
-  return (
-    file.type === 'text/xml' ||
-    file.type === 'application/xml' ||
-    name.endsWith('.xml') ||
-    name.endsWith('.xsl') ||
-    name.endsWith('.xslt')
-  );
-}
-
-function isXslFile(file) {
-  const name = file.name.toLowerCase();
-  return name.endsWith('.xsl') || name.endsWith('.xslt');
-}
-
-function formatXml(xml) {
-  const normalized = xml.replace(/>\s*</g, '><').trim();
-
-  return normalized
-    .replace(/(>)(<)(\/*)/g, '$1\n$2$3')
-    .split('\n')
-    .reduce(
-      (state, line) => {
-        const trimmed = line.trim();
-        if (!trimmed) {
-          return state;
-        }
-
-        if (/^<\//.test(trimmed)) {
-          state.indent -= 1;
-        }
-
-        const indent = '  '.repeat(Math.max(state.indent, 0));
-        state.output.push(indent + trimmed);
-
-        if (
-          /^<[^!?/][^>]*[^/]?>$/.test(trimmed) &&
-          !/^<.*<\/.*>$/.test(trimmed)
-        ) {
-          state.indent += 1;
-        }
-
-        return state;
-      },
-      { output: [], indent: 0 }
-    )
-    .output.join('\n');
-}
-
-function escapeHtml(text) {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-function highlightXml(xmlText) {
-  let escaped = escapeHtml(xmlText);
-
-  escaped = escaped.replace(
-    /(&lt;!--[\s\S]*?--&gt;)/g,
-    '<span class="xml-comment">$1</span>'
-  );
-
-  escaped = escaped.replace(
-    /(&lt;\/?)([\w:-]+)(.*?)(\/?&gt;)/g,
-    (match, open, tagName, attrs, close) => {
-      const highlightedAttrs = attrs.replace(
-        /([\w:-]+)=(&quot;.*?&quot;|".*?"|'.*?')/g,
-        '<span class="xml-attr">$1</span>=<span class="xml-value">$2</span>'
-      );
-
-      return `${open}<span class="xml-tag">${tagName}</span>${highlightedAttrs}${close}`;
-    }
-  );
-
-  return escaped;
-}
-
-function buildTreeView(element) {
-  const rootList = document.createElement('ul');
-  rootList.className = 'tree-list';
-  rootList.appendChild(buildTreeNode(element));
-  return rootList;
-}
-
-function buildTreeNode(node) {
-  const item = document.createElement('li');
-  item.className = 'tree-node';
-
-  const label = document.createElement('div');
-  label.className = 'tree-label';
-
-  const attrs = Array.from(node.attributes || [])
-    .map((attr) => `${attr.name}="${attr.value}"`)
-    .join(' ');
-
-  label.textContent = attrs
-    ? `<${node.nodeName} ${attrs}>`
-    : `<${node.nodeName}>`;
-
-  item.appendChild(label);
-
-  const childElements = Array.from(node.children || []);
-  const textContent = Array.from(node.childNodes || [])
-    .filter((child) => child.nodeType === Node.TEXT_NODE)
-    .map((child) => child.textContent.trim())
-    .filter(Boolean)
-    .join(' ');
-
-  if (textContent) {
-    const text = document.createElement('div');
-    text.className = 'tree-text';
-    text.textContent = textContent;
-    item.appendChild(text);
-  }
-
-  if (childElements.length > 0) {
-    const childList = document.createElement('ul');
-    childList.className = 'tree-list';
-
-    childElements.forEach((child) => {
-      childList.appendChild(buildTreeNode(child));
-    });
-
-    item.appendChild(childList);
-  }
-
-  return item;
-}
-
-async function copyCurrentPanel() {
-  const activeTab = document.querySelector('.tab.is-active')?.dataset.tab;
-  let text = '';
-
-  if (activeTab === 'formatted') {
-    text = formattedOutput.innerText.trim();
-  } else if (activeTab === 'tree') {
-    text = treeOutput.innerText.trim();
-  } else if (activeTab === 'transformed') {
-    text = transformedOutput.innerText.trim();
-  }
-
-  if (!text || text.includes('ここに')) {
-    showMessage('コピーする内容がありません。', 'error');
-    return;
-  }
-
-  try {
-    await navigator.clipboard.writeText(text);
-    showMessage('表示内容をコピーしました。', 'success');
-  } catch (error) {
-    showMessage('コピーに失敗しました。', 'error');
-  }
+function showMessage(text) {
+  message.textContent = text;
 }
